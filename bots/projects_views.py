@@ -20,6 +20,7 @@ from accounts.models import User, UserRole
 
 from .bots_api_utils import BotCreationSource, create_bot, create_webhook_subscription
 from .launch_bot_utils import launch_bot
+from .meeting_url_utils import meeting_type_from_url
 from .models import (
     ApiKey,
     Bot,
@@ -36,6 +37,7 @@ from .models import (
     CreditTransaction,
     GoogleMeetBotLogin,
     GoogleMeetBotLoginGroup,
+    MeetingTypes,
     Participant,
     ParticipantEventTypes,
     Project,
@@ -1186,6 +1188,14 @@ class CreateBotView(LoginRequiredMixin, ProjectUrlContextMixin, View):
                 "bot_name": request.POST.get("bot_name") or "Meeting Bot",
             }
 
+            transcription_settings = self._build_transcription_settings(
+                request.POST.get("transcription_provider", ""),
+                request.POST.get("language", ""),
+                request.POST.get("meeting_url", ""),
+            )
+            if transcription_settings:
+                data["transcription_settings"] = transcription_settings
+
             bot, error = create_bot(data=data, source=BotCreationSource.DASHBOARD, project=project)
             if error:
                 return HttpResponse(json.dumps(error), status=400)
@@ -1197,6 +1207,52 @@ class CreateBotView(LoginRequiredMixin, ProjectUrlContextMixin, View):
             return HttpResponse("ok", status=200)
         except Exception as e:
             return HttpResponse(str(e), status=400)
+
+    @staticmethod
+    def _build_transcription_settings(provider, language, meeting_url):
+        if provider == "deepgram":
+            settings = {"deepgram": {}}
+            if language:
+                settings["deepgram"]["language"] = language
+            return settings
+
+        if provider == "elevenlabs":
+            settings = {"elevenlabs": {"model_id": "scribe_v1"}}
+            if language:
+                settings["elevenlabs"]["language_code"] = language
+            return settings
+
+        # platform_default or empty
+        if not language:
+            return None
+
+        meeting_type = meeting_type_from_url(meeting_url)
+
+        if meeting_type == MeetingTypes.GOOGLE_MEET:
+            return {"meeting_closed_captions": {"google_meet_language": language}}
+
+        if meeting_type == MeetingTypes.TEAMS:
+            teams_special = {"cmn-Hans-CN": "zh-cn", "cmn-Hant-TW": "zh-tw", "ar-EG": "ar-ae"}
+            return {"meeting_closed_captions": {"teams_language": teams_special.get(language, language.lower())}}
+
+        if meeting_type == MeetingTypes.ZOOM:
+            zoom_map = {
+                "ar-EG": "Arabic", "cmn-Hans-CN": "Chinese (Simplified)",
+                "cs-CZ": "Czech", "nl-NL": "Dutch", "en-US": "English",
+                "en-GB": "English", "fi-FI": "Finnish", "fr-FR": "French",
+                "fr-CA": "French (Canada)", "de-DE": "German", "hi-IN": "Hindi",
+                "hu-HU": "Hungarian", "id-ID": "Indonesian", "it-IT": "Italian",
+                "ja-JP": "Japanese", "ko-KR": "Korean", "pl-PL": "Polish",
+                "pt-BR": "Portuguese", "pt-PT": "Portuguese", "ro-RO": "Romanian",
+                "ru-RU": "Russian", "es-MX": "Spanish", "es-ES": "Spanish",
+                "sv-SE": "Swedish", "th-TH": "Thai", "tr-TR": "Turkish",
+                "uk-UA": "Ukrainian", "vi-VN": "Vietnamese",
+            }
+            zoom_name = zoom_map.get(language)
+            if zoom_name:
+                return {"meeting_closed_captions": {"zoom_language": zoom_name}}
+
+        return None
 
 
 class CreateProjectView(AdminRequiredMixin, View):

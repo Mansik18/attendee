@@ -22,6 +22,24 @@
                         <div class="form-text">A friendly name for this bot</div>
                     </div>
                     
+                    <div class="mb-3">
+                        <label for="id_transcription_provider" class="form-label">Transcription Provider</label>
+                        <select class="form-select" id="id_transcription_provider" name="transcription_provider">
+                            <option value="platform_default" selected>Platform Default</option>
+                            <option value="deepgram">Deepgram</option>
+                            <option value="elevenlabs">ElevenLabs</option>
+                        </select>
+                        <div class="form-text">Choose which transcription service to use</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="id_language" class="form-label">Language</label>
+                        <select class="form-select" id="id_language" name="language">
+                            <option value="">Default</option>
+                        </select>
+                        <div class="form-text">Select the transcription language</div>
+                    </div>
+
                     <div id="formErrors" class="alert alert-danger d-none"></div>
                 </form>
                 
@@ -124,43 +142,249 @@
 
 
 
+    // Language options per transcription provider
+    const PROVIDER_LANGUAGES = {
+        platform_default: [
+            {label: "Default", value: ""},
+            {label: "Arabic", value: "ar-EG"},
+            {label: "Chinese (Simplified)", value: "cmn-Hans-CN"},
+            {label: "Chinese (Traditional)", value: "cmn-Hant-TW"},
+            {label: "Czech", value: "cs-CZ"},
+            {label: "Dutch", value: "nl-NL"},
+            {label: "English (US)", value: "en-US"},
+            {label: "English (UK)", value: "en-GB"},
+            {label: "Finnish", value: "fi-FI"},
+            {label: "French", value: "fr-FR"},
+            {label: "French (Canada)", value: "fr-CA"},
+            {label: "German", value: "de-DE"},
+            {label: "Hindi", value: "hi-IN"},
+            {label: "Hungarian", value: "hu-HU"},
+            {label: "Indonesian", value: "id-ID"},
+            {label: "Italian", value: "it-IT"},
+            {label: "Japanese", value: "ja-JP"},
+            {label: "Korean", value: "ko-KR"},
+            {label: "Norwegian", value: "nb-NO"},
+            {label: "Polish", value: "pl-PL"},
+            {label: "Portuguese (Brazil)", value: "pt-BR"},
+            {label: "Portuguese (Portugal)", value: "pt-PT"},
+            {label: "Romanian", value: "ro-RO"},
+            {label: "Russian", value: "ru-RU"},
+            {label: "Spanish (Spain)", value: "es-ES"},
+            {label: "Spanish (Mexico)", value: "es-MX"},
+            {label: "Swedish", value: "sv-SE"},
+            {label: "Thai", value: "th-TH"},
+            {label: "Turkish", value: "tr-TR"},
+            {label: "Ukrainian", value: "uk-UA"},
+            {label: "Vietnamese", value: "vi-VN"},
+        ],
+        deepgram: [
+            {label: "Default (auto-detect)", value: ""},
+            {label: "Multi (auto-detect)", value: "multi"},
+            {label: "English", value: "en"},
+            {label: "Spanish", value: "es"},
+            {label: "French", value: "fr"},
+            {label: "German", value: "de"},
+            {label: "Italian", value: "it"},
+            {label: "Portuguese", value: "pt"},
+            {label: "Russian", value: "ru"},
+            {label: "Chinese", value: "zh"},
+            {label: "Japanese", value: "ja"},
+            {label: "Korean", value: "ko"},
+            {label: "Arabic", value: "ar"},
+            {label: "Hindi", value: "hi"},
+            {label: "Dutch", value: "nl"},
+            {label: "Polish", value: "pl"},
+            {label: "Turkish", value: "tr"},
+            {label: "Ukrainian", value: "uk"},
+            {label: "Swedish", value: "sv"},
+            {label: "Czech", value: "cs"},
+            {label: "Romanian", value: "ro"},
+            {label: "Thai", value: "th"},
+            {label: "Vietnamese", value: "vi"},
+            {label: "Indonesian", value: "id"},
+            {label: "Norwegian", value: "no"},
+            {label: "Danish", value: "da"},
+            {label: "Finnish", value: "fi"},
+        ],
+        elevenlabs: [
+            {label: "Default (auto-detect)", value: ""},
+            {label: "English", value: "eng"},
+            {label: "Spanish", value: "spa"},
+            {label: "French", value: "fra"},
+            {label: "German", value: "deu"},
+            {label: "Italian", value: "ita"},
+            {label: "Portuguese", value: "por"},
+            {label: "Russian", value: "rus"},
+            {label: "Chinese", value: "zho"},
+            {label: "Japanese", value: "jpn"},
+            {label: "Korean", value: "kor"},
+            {label: "Arabic", value: "ara"},
+            {label: "Hindi", value: "hin"},
+            {label: "Dutch", value: "nld"},
+            {label: "Polish", value: "pol"},
+            {label: "Turkish", value: "tur"},
+            {label: "Ukrainian", value: "ukr"},
+            {label: "Swedish", value: "swe"},
+            {label: "Czech", value: "ces"},
+            {label: "Romanian", value: "ron"},
+            {label: "Thai", value: "tha"},
+            {label: "Vietnamese", value: "vie"},
+            {label: "Indonesian", value: "ind"},
+            {label: "Norwegian", value: "nor"},
+            {label: "Danish", value: "dan"},
+            {label: "Finnish", value: "fin"},
+            {label: "Hungarian", value: "hun"},
+        ],
+    };
+
+    // Zoom language name mapping for curl preview
+    const LOCALE_TO_ZOOM = {
+        "ar-EG": "Arabic", "cmn-Hans-CN": "Chinese (Simplified)", "cs-CZ": "Czech",
+        "nl-NL": "Dutch", "en-US": "English", "en-GB": "English",
+        "fi-FI": "Finnish", "fr-FR": "French", "fr-CA": "French (Canada)",
+        "de-DE": "German", "hi-IN": "Hindi", "hu-HU": "Hungarian",
+        "id-ID": "Indonesian", "it-IT": "Italian", "ja-JP": "Japanese",
+        "ko-KR": "Korean", "pl-PL": "Polish", "pt-BR": "Portuguese",
+        "pt-PT": "Portuguese", "ro-RO": "Romanian", "ru-RU": "Russian",
+        "es-MX": "Spanish", "es-ES": "Spanish", "sv-SE": "Swedish",
+        "th-TH": "Thai", "tr-TR": "Turkish", "uk-UA": "Ukrainian",
+        "vi-VN": "Vietnamese",
+    };
+
+    // Teams special locale mappings for curl preview
+    const LOCALE_TO_TEAMS_SPECIAL = {
+        "cmn-Hans-CN": "zh-cn", "cmn-Hant-TW": "zh-tw", "ar-EG": "ar-ae",
+    };
+
+    function localeToTeams(locale) {
+        return LOCALE_TO_TEAMS_SPECIAL[locale] || locale.toLowerCase();
+    }
+
+    function detectPlatform(url) {
+        if (!url) return null;
+        if (url.includes('zoom.us')) return 'zoom';
+        if (url.includes('meet.google.com')) return 'google_meet';
+        if (url.includes('teams.microsoft.com') || url.includes('teams.live.com')) return 'teams';
+        return null;
+    }
+
+    function buildTranscriptionSettingsLines(provider, language, meetingUrl) {
+        if (!provider || provider === 'platform_default') {
+            if (!language) return null;
+            const platform = detectPlatform(meetingUrl);
+            let key, value;
+            if (platform === 'zoom') {
+                key = 'zoom_language';
+                value = LOCALE_TO_ZOOM[language] || language;
+            } else if (platform === 'teams') {
+                key = 'teams_language';
+                value = localeToTeams(language);
+            } else {
+                key = 'google_meet_language';
+                value = language;
+            }
+            return [
+                `    "transcription_settings": {`,
+                `      "meeting_closed_captions": {`,
+                `        "${key}": "${value}"`,
+                `      }`,
+                `    }`,
+            ];
+        } else if (provider === 'deepgram') {
+            if (!language) {
+                return [`    "transcription_settings": {`, `      "deepgram": {}`, `    }`];
+            }
+            return [
+                `    "transcription_settings": {`,
+                `      "deepgram": {`,
+                `        "language": "${language}"`,
+                `      }`,
+                `    }`,
+            ];
+        } else if (provider === 'elevenlabs') {
+            if (!language) {
+                return [
+                    `    "transcription_settings": {`,
+                    `      "elevenlabs": {`,
+                    `        "model_id": "scribe_v1"`,
+                    `      }`,
+                    `    }`,
+                ];
+            }
+            return [
+                `    "transcription_settings": {`,
+                `      "elevenlabs": {`,
+                `        "model_id": "scribe_v1",`,
+                `        "language_code": "${language}"`,
+                `      }`,
+                `    }`,
+            ];
+        }
+        return null;
+    }
+
     // Dynamic API code update
     function initializeCodeListener() {
         // Get form fields
         const meetingUrlField = document.getElementById('id_meeting_url');
         const botNameField = document.getElementById('id_bot_name');
+        const providerField = document.getElementById('id_transcription_provider');
+        const languageField = document.getElementById('id_language');
         const codeBlock = document.getElementById('apiCodeExample');
-        
-        if (meetingUrlField && botNameField && codeBlock) {
-            // Function to update the curl command
+
+        if (meetingUrlField && botNameField && providerField && languageField && codeBlock) {
+            function populateLanguages() {
+                const provider = providerField.value;
+                const languages = PROVIDER_LANGUAGES[provider] || [];
+                languageField.innerHTML = '';
+                languages.forEach(function(lang) {
+                    const option = document.createElement('option');
+                    option.value = lang.value;
+                    option.textContent = lang.label;
+                    languageField.appendChild(option);
+                });
+            }
+
             function updateCurlCommand() {
                 const meetingUrl = meetingUrlField.value || 'https://zoom.us/j/123?pwd=456';
                 const botName = botNameField.value || 'My Bot';
+                const provider = providerField.value;
+                const language = languageField.value;
                 const currentHost = window.location.origin;
-                
-                // Create properly formatted curl command  
+
+                const tsLines = buildTranscriptionSettingsLines(provider, language, meetingUrl);
+
                 const lines = [
                     `curl ${currentHost}/api/v1/bots \\`,
                     `  --request POST \\`,
                     `  --header 'Authorization: Token YOUR_API_KEY_HERE' \\`,
                     `  --header 'Content-Type: application/json' \\`,
                     `  --data '{`,
-                    `    "meeting_url": "${meetingUrl}",`,
-                    `    "bot_name": "${botName}"`,
-                    `  }'`
                 ];
-                
-                const curlCommand = lines.join('\n');
-                
-                // Ensure proper formatting is maintained
-                codeBlock.textContent = curlCommand;
+
+                if (tsLines) {
+                    lines.push(`    "meeting_url": "${meetingUrl}",`);
+                    lines.push(`    "bot_name": "${botName}",`);
+                    lines.push(...tsLines);
+                } else {
+                    lines.push(`    "meeting_url": "${meetingUrl}",`);
+                    lines.push(`    "bot_name": "${botName}"`);
+                }
+
+                lines.push(`  }'`);
+
+                codeBlock.textContent = lines.join('\n');
             }
-            
-            // Add event listeners to form fields
+
+            providerField.addEventListener('change', function() {
+                populateLanguages();
+                updateCurlCommand();
+            });
+            languageField.addEventListener('change', updateCurlCommand);
             meetingUrlField.addEventListener('input', updateCurlCommand);
             botNameField.addEventListener('input', updateCurlCommand);
-            
-            // Set initial value with proper formatting
+
+            populateLanguages();
             updateCurlCommand();
         }
     }
