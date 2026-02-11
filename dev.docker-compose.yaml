@@ -32,7 +32,7 @@ services:
     networks:
       - attendee_network
     ports:
-      - "8000:8000"
+      - "8888:8000"
     environment:
       - POSTGRES_HOST=postgres
       - REDIS_URL=redis://redis:6379/5
