@@ -2076,7 +2076,20 @@ class Recording(models.Model):
             return self.file.url
 
         # Generate a temporary signed URL that expires in 30 minutes (1800 seconds)
-        return self.file.storage.bucket.meta.client.generate_presigned_url(
+        client = self.file.storage.bucket.meta.client
+        presigned_endpoint = getattr(settings, "AWS_PRESIGNED_ENDPOINT_URL", None)
+        if presigned_endpoint:
+            import boto3
+            from botocore.config import Config
+
+            client = boto3.client(
+                "s3",
+                endpoint_url=presigned_endpoint,
+                aws_access_key_id=client._request_signer._credentials.access_key,
+                aws_secret_access_key=client._request_signer._credentials.secret_key,
+                config=Config(signature_version="s3v4"),
+            )
+        return client.generate_presigned_url(
             "get_object",
             Params={"Bucket": self.file.storage.bucket_name, "Key": self.file.name},
             ExpiresIn=1800,
@@ -2774,7 +2787,20 @@ class BotDebugScreenshot(models.Model):
             return self.file.url
 
         # Generate a temporary signed URL that expires in 30 minutes (1800 seconds)
-        return self.file.storage.bucket.meta.client.generate_presigned_url(
+        client = self.file.storage.bucket.meta.client
+        presigned_endpoint = getattr(settings, "AWS_PRESIGNED_ENDPOINT_URL", None)
+        if presigned_endpoint:
+            import boto3
+            from botocore.config import Config
+
+            client = boto3.client(
+                "s3",
+                endpoint_url=presigned_endpoint,
+                aws_access_key_id=client._request_signer._credentials.access_key,
+                aws_secret_access_key=client._request_signer._credentials.secret_key,
+                config=Config(signature_version="s3v4"),
+            )
+        return client.generate_presigned_url(
             "get_object",
             Params={"Bucket": self.file.storage.bucket_name, "Key": self.file.name},
             ExpiresIn=1800,

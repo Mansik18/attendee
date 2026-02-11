@@ -245,6 +245,7 @@ STORAGES = {
     },
 }
 AWS_S3_SIGNATURE_VERSION = "s3v4"
+AWS_PRESIGNED_ENDPOINT_URL = os.getenv("AWS_PRESIGNED_ENDPOINT_URL")
 if os.getenv("USE_IRSA_FOR_S3_STORAGE", "false") == "true":
     AWS_S3_ADDRESSING_STYLE = "virtual"
 
