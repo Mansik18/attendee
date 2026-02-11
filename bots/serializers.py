@@ -438,10 +438,11 @@ def _validate_metadata_attribute(value):
     if not value:
         raise serializers.ValidationError("Metadata must have at least one key")
 
-    # Check if all values are strings
+    # Check if all values are strings (except reserved keys that store structured data)
+    STRUCTURED_METADATA_KEYS = {"auto_bot_settings"}
     if settings.REQUIRE_STRING_VALUES_IN_METADATA:
         for key, val in value.items():
-            if not isinstance(val, str):
+            if key not in STRUCTURED_METADATA_KEYS and not isinstance(val, str):
                 raise serializers.ValidationError(f"Value for key '{key}' must be a string")
 
     # Check if all keys are strings

@@ -15,7 +15,7 @@ from django.db import transaction
 from django.urls import reverse
 from django.utils import timezone
 
-from bots.bots_api_utils import build_site_url, delete_bot, patch_bot
+from bots.bots_api_utils import BotCreationSource, build_site_url, create_bot, delete_bot, patch_bot
 from bots.calendars_api_utils import remove_bots_from_calendar
 from bots.meeting_url_utils import meeting_type_from_url
 from bots.models import Bot, BotStates, Calendar, CalendarEvent, CalendarNotificationChannel, CalendarPlatform, CalendarStates, WebhookTriggerTypes
@@ -183,6 +183,37 @@ class CalendarSyncHandler:
         # Sync the bots for the calendar event
         sync_bots_for_calendar_event(local_event)
 
+    def _auto_create_bot_for_event(self, calendar_event: CalendarEvent):
+        """Automatically create a bot for a newly synced calendar event if auto_bot_settings is enabled."""
+        try:
+            auto_bot_settings = (self.calendar.metadata or {}).get("auto_bot_settings")
+            if not auto_bot_settings or not auto_bot_settings.get("enabled"):
+                return
+
+            if not calendar_event.meeting_url:
+                return
+
+            if calendar_event.start_time and calendar_event.start_time < timezone.now():
+                return
+
+            data = {
+                "calendar_event_id": calendar_event.object_id,
+                "bot_name": auto_bot_settings.get("bot_name", "Notetaker"),
+                "deduplication_key": f"auto_{calendar_event.object_id}",
+            }
+
+            transcription_settings = auto_bot_settings.get("transcription_settings")
+            if transcription_settings:
+                data["transcription_settings"] = transcription_settings
+
+            bot, error = create_bot(data=data, source=BotCreationSource.SCHEDULER, project=self.calendar.project)
+            if error:
+                logger.warning(f"Calendar {self.calendar.object_id}: Failed to auto-create bot for event {calendar_event.object_id}: {error}")
+            else:
+                logger.info(f"Calendar {self.calendar.object_id}: Auto-created bot {bot.object_id} for event {calendar_event.object_id}")
+        except Exception as e:
+            logger.warning(f"Calendar {self.calendar.object_id}: Exception auto-creating bot for event {calendar_event.object_id}: {e}")
+
     def sync_events(self) -> dict:
         """
         Main sync method that coordinates the entire sync process.
@@ -192,7 +223,10 @@ class CalendarSyncHandler:
         """
         try:
             # Step 0: Refresh notification channels
-            self._refresh_notification_channels()
+            try:
+                self._refresh_notification_channels()
+            except Exception as e:
+                logger.warning(f"Calendar {self.calendar.object_id}: Failed to refresh notification channels (continuing sync): {e}")
 
             # Step 1: Set time window
             now = timezone.now()
@@ -246,6 +280,7 @@ class CalendarSyncHandler:
                     if was_created:
                         created_count += 1
                         logger.info(f"Calendar {self.calendar.object_id}: Created event {remote_event_id}")
+                        self._auto_create_bot_for_event(local_event)
                     elif was_updated:
                         updated_count += 1
                         logger.info(f"Calendar {self.calendar.object_id}: Updated event {remote_event_id}")
