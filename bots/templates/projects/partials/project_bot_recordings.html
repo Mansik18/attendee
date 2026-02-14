@@ -49,7 +49,11 @@
 
                         {% if recording.transcription_state == RecordingTranscriptionStates.IN_PROGRESS or recording.transcription_state == RecordingTranscriptionStates.NOT_STARTED %}
                             <div class="alert alert-info mt-3">
-                                Real-time transcription in progress. Refresh to see the latest updates.
+                                {% if is_post_call_transcription %}
+                                    Recording audio for post-call transcription. The full transcript will appear after the call ends.
+                                {% else %}
+                                    Real-time transcription in progress. Refresh to see the latest updates.
+                                {% endif %}
                             </div>
                         {% endif %}
 
@@ -116,6 +120,49 @@
 {% else %}
 <div class="alert alert-info">No recordings available.</div>
 {% endif %}
+
+{% if async_transcriptions %}
+<div class="mt-4">
+    <h5>Post-Call Transcription</h5>
+    {% for at in async_transcriptions %}
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>
+                    <code>{{ at.object_id }}</code>
+                    <small class="text-muted ms-2">{{ at.created_at }}</small>
+                </span>
+                <span>
+                    {% if at.state == AsyncTranscriptionStates.COMPLETE %}
+                        <span class="badge bg-success">Complete</span>
+                    {% elif at.state == AsyncTranscriptionStates.IN_PROGRESS %}
+                        <span class="badge bg-warning text-dark">In Progress</span>
+                    {% elif at.state == AsyncTranscriptionStates.FAILED %}
+                        <span class="badge bg-danger">Failed</span>
+                    {% elif at.state == AsyncTranscriptionStates.NOT_STARTED %}
+                        <span class="badge bg-secondary">Not Started</span>
+                    {% endif %}
+                </span>
+            </div>
+            {% if at.state == AsyncTranscriptionStates.COMPLETE and at.transcript_text %}
+                <div class="card-body">
+                    <div class="mb-2">
+                        <a href="{% url 'bots:project-bot-transcript-download' bot.project.object_id bot.object_id at.object_id %}"
+                           class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-download"></i> Download .txt
+                        </a>
+                    </div>
+                    <pre class="mb-0" style="white-space: pre-wrap; max-height: 400px; overflow-y: auto;">{{ at.transcript_text }}</pre>
+                </div>
+            {% elif at.state == AsyncTranscriptionStates.IN_PROGRESS %}
+                <div class="card-body">
+                    <div class="text-muted">Transcription in progress... Refresh to see updates.</div>
+                </div>
+            {% endif %}
+        </div>
+    {% endfor %}
+</div>
+{% endif %}
+
 <script>
     function seekVideo(element, timestamp_ms) {
         const container = element.closest('.recording-container');

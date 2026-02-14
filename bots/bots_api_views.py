@@ -808,6 +808,23 @@ class TranscriptView(APIView):
             # Apply ordering
             utterances = utterances_query.order_by("timestamp_ms")
 
+            if request.query_params.get("format") == "txt":
+                from django.http import HttpResponse
+
+                lines = []
+                for utterance in utterances:
+                    text = utterance.transcription.get("transcript", "")
+                    if not text:
+                        continue
+                    ts = utterance.timestamp_ms // 1000
+                    h, remainder = divmod(ts, 3600)
+                    m, s = divmod(remainder, 60)
+                    speaker = utterance.participant.full_name or "Unknown"
+                    lines.append(f"[{h:02d}:{m:02d}:{s:02d}] {speaker}: {text}")
+                response = HttpResponse("\n".join(lines), content_type="text/plain; charset=utf-8")
+                response["Content-Disposition"] = f'attachment; filename="transcript_{object_id}.txt"'
+                return response
+
             # Format the response, skipping empty transcriptions
             transcript_data = [
                 {

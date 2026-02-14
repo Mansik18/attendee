@@ -399,6 +399,7 @@ TRANSCRIPTION_SETTINGS_SCHEMA = {
                     "enum": get_elevenlabs_language_codes(),
                 },
                 "tag_audio_events": {"type": "boolean", "description": "Whether to tag audio events like 'laughter' in the transcription."},
+                "post_call_transcription": {"type": "boolean", "description": "If true, audio chunks are saved during the call and transcribed as a single request after the call ends."},
             },
             "required": ["model_id"],
             "additionalProperties": False,

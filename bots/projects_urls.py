@@ -47,6 +47,11 @@ urlpatterns = [
         name="project-bot-recordings",
     ),
     path(
+        "<str:object_id>/bots/<str:bot_object_id>/transcript/<str:transcription_object_id>/download",
+        projects_views.ProjectBotTranscriptDownloadView.as_view(),
+        name="project-bot-transcript-download",
+    ),
+    path(
         "<str:object_id>/credentials",
         projects_views.ProjectCredentialsView.as_view(),
         name="project-credentials",

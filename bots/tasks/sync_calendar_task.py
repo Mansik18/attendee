@@ -206,6 +206,10 @@ class CalendarSyncHandler:
             if transcription_settings:
                 data["transcription_settings"] = transcription_settings
 
+            automatic_leave = auto_bot_settings.get("automatic_leave_settings")
+            if automatic_leave:
+                data["automatic_leave_settings"] = automatic_leave
+
             bot, error = create_bot(data=data, source=BotCreationSource.SCHEDULER, project=self.calendar.project)
             if error:
                 logger.warning(f"Calendar {self.calendar.object_id}: Failed to auto-create bot for event {calendar_event.object_id}: {error}")

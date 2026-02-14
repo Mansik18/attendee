@@ -23,6 +23,8 @@ from .launch_bot_utils import launch_bot
 from .meeting_url_utils import meeting_type_from_url
 from .models import (
     ApiKey,
+    AsyncTranscription,
+    AsyncTranscriptionStates,
     Bot,
     BotEvent,
     BotEventSubTypes,
@@ -839,14 +841,67 @@ class ProjectBotRecordingsView(LoginRequiredMixin, ProjectUrlContextMixin, View)
             # Redirect to bots list if bot not found
             return redirect("bots:project-bots", object_id=object_id)
 
+        # Get post-call async transcriptions
+        default_recording = bot.recordings.filter(is_default_recording=True).first()
+        async_transcriptions = []
+        if default_recording:
+            for at in default_recording.async_transcriptions.order_by("-created_at"):
+                utterance = at.utterances.select_related("participant").filter(transcription__isnull=False).first()
+                async_transcriptions.append({
+                    "object_id": at.object_id,
+                    "state": at.state,
+                    "created_at": at.created_at,
+                    "completed_at": at.completed_at,
+                    "transcript_text": utterance.transcription.get("transcript", "") if utterance and utterance.transcription else "",
+                })
+
         context = {
             "RecordingStates": RecordingStates,
             "RecordingTypes": RecordingTypes,
             "RecordingTranscriptionStates": RecordingTranscriptionStates,
+            "AsyncTranscriptionStates": AsyncTranscriptionStates,
             "recordings": generate_recordings_json_for_bot_detail_view(bot),
+            "async_transcriptions": async_transcriptions,
+            "bot": bot,
+            "is_post_call_transcription": bot.transcription_settings.elevenlabs_post_call_transcription(),
         }
 
         return render(request, "projects/partials/project_bot_recordings.html", context)
+
+
+class ProjectBotTranscriptDownloadView(LoginRequiredMixin, View):
+    def get(self, request, object_id, bot_object_id, transcription_object_id):
+        project = get_project_for_user(user=request.user, project_object_id=object_id)
+        bot = Bot.objects.get(object_id=bot_object_id, project=project)
+        recording = Recording.objects.filter(bot=bot, is_default_recording=True).first()
+
+        if not recording:
+            return HttpResponse("No recording found", status=404)
+
+        async_transcription = AsyncTranscription.objects.get(
+            object_id=transcription_object_id,
+            recording=recording,
+        )
+
+        if async_transcription.state != AsyncTranscriptionStates.COMPLETE:
+            return HttpResponse("Transcription not complete", status=400)
+
+        utterances = Utterance.objects.filter(
+            recording=recording,
+            async_transcription=async_transcription,
+            transcription__isnull=False,
+        ).order_by("timestamp_ms")
+
+        lines = []
+        for utterance in utterances:
+            text = utterance.transcription.get("transcript", "")
+            if not text:
+                continue
+            lines.append(text)
+
+        response = HttpResponse("\n\n".join(lines), content_type="text/plain; charset=utf-8")
+        response["Content-Disposition"] = f'attachment; filename="transcript_{bot_object_id}.txt"'
+        return response
 
 
 class ProjectWebhooksView(LoginRequiredMixin, ProjectUrlContextMixin, View):
@@ -1192,9 +1247,17 @@ class CreateBotView(LoginRequiredMixin, ProjectUrlContextMixin, View):
                 request.POST.get("transcription_provider", ""),
                 request.POST.get("language", ""),
                 request.POST.get("meeting_url", ""),
+                post_call_transcription=request.POST.get("post_call_transcription") == "on",
             )
             if transcription_settings:
                 data["transcription_settings"] = transcription_settings
+
+            data["automatic_leave_settings"] = {
+                "silence_timeout_seconds": 600,
+                "only_participant_in_meeting_timeout_seconds": 60,
+                "wait_for_host_to_start_meeting_timeout_seconds": 600,
+                "waiting_room_timeout_seconds": 900,
+            }
 
             bot, error = create_bot(data=data, source=BotCreationSource.DASHBOARD, project=project)
             if error:
@@ -1209,7 +1272,7 @@ class CreateBotView(LoginRequiredMixin, ProjectUrlContextMixin, View):
             return HttpResponse(str(e), status=400)
 
     @staticmethod
-    def _build_transcription_settings(provider, language, meeting_url):
+    def _build_transcription_settings(provider, language, meeting_url, post_call_transcription=False):
         if provider == "deepgram":
             settings = {"deepgram": {}}
             if language:
@@ -1220,6 +1283,8 @@ class CreateBotView(LoginRequiredMixin, ProjectUrlContextMixin, View):
             settings = {"elevenlabs": {"model_id": "scribe_v1"}}
             if language:
                 settings["elevenlabs"]["language_code"] = language
+            if post_call_transcription:
+                settings["elevenlabs"]["post_call_transcription"] = True
             return settings
 
         # platform_default or empty

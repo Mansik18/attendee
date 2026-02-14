@@ -40,6 +40,12 @@
                         <div class="form-text">Select the transcription language</div>
                     </div>
 
+                    <div class="mb-3 form-check" id="postCallTranscriptionGroup" style="display: none;">
+                        <input type="checkbox" class="form-check-input" id="id_post_call_transcription" name="post_call_transcription">
+                        <label class="form-check-label" for="id_post_call_transcription">Post-call transcription</label>
+                        <div class="form-text">Transcribe the full recording after the call ends instead of in real-time</div>
+                    </div>
+
                     <div id="formErrors" class="alert alert-danger d-none"></div>
                 </form>
                 
@@ -376,9 +382,12 @@
                 codeBlock.textContent = lines.join('\n');
             }
 
+            const postCallGroup = document.getElementById('postCallTranscriptionGroup');
+
             providerField.addEventListener('change', function() {
                 populateLanguages();
                 updateCurlCommand();
+                postCallGroup.style.display = providerField.value === 'elevenlabs' ? 'block' : 'none';
             });
             languageField.addEventListener('change', updateCurlCommand);
             meetingUrlField.addEventListener('input', updateCurlCommand);

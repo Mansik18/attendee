@@ -23,6 +23,7 @@ from bots.bots_api_utils import BotCreationSource
 from bots.external_callback_utils import get_zoom_tokens
 from bots.meeting_url_utils import meeting_type_from_url
 from bots.models import (
+    AsyncTranscription,
     AudioChunk,
     Bot,
     BotChatMessageRequestManager,
@@ -105,6 +106,9 @@ class BotController:
 
     def save_utterances_for_individual_audio_chunks(self):
         return self.get_recording_transcription_provider() != TranscriptionProviders.CLOSED_CAPTION_FROM_PLATFORM
+
+    def use_post_call_transcription(self):
+        return self.bot_in_db.transcription_settings.elevenlabs_post_call_transcription()
 
     def save_utterances_for_closed_captions(self):
         return self.get_recording_transcription_provider() == TranscriptionProviders.CLOSED_CAPTION_FROM_PLATFORM
@@ -593,10 +597,18 @@ class BotController:
             self.recording_file_saved(file_uploader.filename)
 
         if self.bot_in_db.create_debug_recording():
-            self.save_debug_recording()
+            try:
+                self.save_debug_recording()
+            except Exception as e:
+                logger.exception(f"Failed to save debug recording for bot {self.bot_in_db.id}: {e}")
+
+        # Trigger post-call transcription if enabled
+        if self.use_post_call_transcription():
+            self._trigger_post_call_transcription()
 
         if self.bot_in_db.state == BotStates.POST_PROCESSING:
-            self.wait_until_all_utterances_are_terminated()
+            if not self.use_post_call_transcription():
+                self.wait_until_all_utterances_are_terminated()
             BotEventManager.create_event(bot=self.bot_in_db, event_type=BotEventTypes.POST_PROCESSING_COMPLETED)
 
         normal_quitting_process_worked = True
@@ -619,6 +631,30 @@ class BotController:
             time.sleep(5)
 
         logger.info(f"Timed out in post-processing waiting for utterances to terminate for bot {self.bot_in_db.id}. Transcription will be marked as failed because recording terminated.")
+
+    def _trigger_post_call_transcription(self):
+        from bots.tasks import process_post_call_transcription
+
+        try:
+            default_recording = self.bot_in_db.recordings.filter(is_default_recording=True).first()
+            if not default_recording:
+                logger.warning(f"No default recording found for bot {self.bot_in_db.id}, skipping post-call transcription")
+                return
+
+            # Build settings from the bot's transcription settings
+            settings_dict = {
+                "transcription_settings": self.bot_in_db.settings.get("transcription_settings", {}),
+            }
+
+            async_transcription = AsyncTranscription.objects.create(
+                recording=default_recording,
+                settings=settings_dict,
+            )
+
+            logger.info(f"Created AsyncTranscription {async_transcription.object_id} for post-call transcription of bot {self.bot_in_db.id}")
+            process_post_call_transcription.delay(async_transcription.id)
+        except Exception as e:
+            logger.exception(f"Failed to trigger post-call transcription for bot {self.bot_in_db.id}: {e}")
 
     def __init__(self, bot_id):
         self.bot_in_db = Bot.objects.get(id=bot_id)
@@ -1320,6 +1356,10 @@ class BotController:
         )
 
         if not self.save_utterances_for_individual_audio_chunks():
+            return
+
+        # Skip per-chunk transcription if post-call mode is enabled
+        if self.use_post_call_transcription():
             return
 
         # Create new utterance record

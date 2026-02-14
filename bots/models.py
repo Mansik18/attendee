@@ -623,6 +623,9 @@ class TranscriptionSettings:
     def elevenlabs_tag_audio_events(self):
         return self._settings.get("elevenlabs", {}).get("tag_audio_events", None)
 
+    def elevenlabs_post_call_transcription(self):
+        return self._settings.get("elevenlabs", {}).get("post_call_transcription", False)
+
     def custom_async_additional_props(self):
         return self._settings.get("custom_async", {})
 
@@ -2076,11 +2079,18 @@ class Recording(models.Model):
             return self.file.url
 
         # Generate a temporary signed URL that expires in 30 minutes (1800 seconds)
-        return self.file.storage.bucket.meta.client.generate_presigned_url(
+        url = self.file.storage.bucket.meta.client.generate_presigned_url(
             "get_object",
             Params={"Bucket": self.file.storage.bucket_name, "Key": self.file.name},
             ExpiresIn=1800,
         )
+
+        # Replace internal endpoint with public one for browser access (e.g. minio in Docker)
+        if settings.AWS_S3_PUBLIC_ENDPOINT_URL:
+            internal_url = self.file.storage.bucket.meta.client.meta.endpoint_url
+            url = url.replace(internal_url, settings.AWS_S3_PUBLIC_ENDPOINT_URL, 1)
+
+        return url
 
     OBJECT_ID_PREFIX = "rec_"
     object_id = models.CharField(max_length=32, unique=True, editable=False)
@@ -2774,11 +2784,18 @@ class BotDebugScreenshot(models.Model):
             return self.file.url
 
         # Generate a temporary signed URL that expires in 30 minutes (1800 seconds)
-        return self.file.storage.bucket.meta.client.generate_presigned_url(
+        url = self.file.storage.bucket.meta.client.generate_presigned_url(
             "get_object",
             Params={"Bucket": self.file.storage.bucket_name, "Key": self.file.name},
             ExpiresIn=1800,
         )
+
+        # Replace internal endpoint with public one for browser access (e.g. minio in Docker)
+        if settings.AWS_S3_PUBLIC_ENDPOINT_URL:
+            internal_url = self.file.storage.bucket.meta.client.meta.endpoint_url
+            url = url.replace(internal_url, settings.AWS_S3_PUBLIC_ENDPOINT_URL, 1)
+
+        return url
 
     def __str__(self):
         return f"Debug Screenshot {self.object_id} for event {self.bot_event}"
